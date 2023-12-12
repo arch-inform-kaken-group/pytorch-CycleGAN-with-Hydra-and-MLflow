@@ -1,0 +1,22 @@
+isTrain:          true
+
+save_latest_freq: 5000      # frequency of saving the latest results
+save_epoch_freq:  5         # frequency of saving checkpoints at the end of epochs
+save_by_iter:     false     # whether saves model by iteration
+continue_train:   false     # continue training: load the latest model
+epoch_count:      1         # the starting epoch count, we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>, ...
+phase:            'train'   # train, val, test, etc
+n_epochs:         100       # number of epochs with the initial learning rate
+n_epochs_decay:   100       # number of epochs to linearly decay learning rate to zero
+beta1_D:           0.5      # momentum term of adam
+lr_D:              0.0002   # initial learning rate for adam
+beta1_G:           0.5      # momentum term of adam
+lr_G:              0.0002   # initial learning rate for adam
+gan_mode:         'lsgan'   # the type of GAN objective. [vanilla| lsgan | wgangp]. vanilla GAN loss is the cross-entropy objective used in the original GAN paper.
+pool_size:        50        # the size of image buffer that stores previously generated images
+lr_policy:        'linear'  # learning rate policy. [linear | step | plateau | cosine]
+lr_decay_iters:   50        # multiply by a gamma every lr_decay_iters iterations
+display_freq:     400       # frequency of showing training results on screen
+update_html_freq: 1000      # frequency of saving training results to html
+print_freq:       100       # frequency of showing training results on console
+no_html:          false     #  do not save intermediate training results to [opt.checkpoints_dir]/[opt.name]/web/

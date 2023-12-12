@@ -18,14 +18,60 @@ See options/base_options.py and options/train_options.py for more training optio
 See training and test tips at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/tips.md
 See frequently asked questions at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/qa.md
 """
+import random
+import numpy as np
+import torch
 import time
-from options.train_options import TrainOptions
+import hydra
+from hydra.core.hydra_config import HydraConfig
+from omegaconf import OmegaConf, ListConfig
 from data import create_dataset
 from models import create_model
+from util.util import set_gpu_device
 from util.visualizer import Visualizer
 
-if __name__ == '__main__':
-    opt = TrainOptions().parse()   # get training options
+
+def torch_fix_seed(seed=42):
+    # Python random
+    random.seed(seed)
+    # Numpy
+    np.random.seed(seed)
+    # Pytorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms = True
+
+
+def my_override_dirname(overrides: ListConfig) -> str:
+    """Process the overrides passed to the app and return a single string"""
+    task_overrides: ListConfig = overrides.task
+    ret: str = "_".join(task_overrides)
+    ret = ret.replace("{", "")
+    ret = ret.replace("}", "")
+    ret = ret.replace("[", "")
+    ret = ret.replace("]", "")
+    ret = ret.replace(",", "_")
+    ret = ret.replace("/", "_")
+    ret = ret.replace("=", "-")
+    return ret
+
+OmegaConf.register_new_resolver("my_override_dirname", my_override_dirname)
+
+@hydra.main(version_base=None, config_path="conf", config_name="train")
+def main(opt):
+    opt.seed = opt.get('seed', None)
+    if opt.seed:
+        torch_fix_seed(opt.seed)
+
+    if opt.suffix:
+        opt.suffix = (opt.suffix.format(**dict(opt))) if opt.suffix != '' else ''
+
+    set_gpu_device(opt)
+
+    opt.output_dir = HydraConfig.get().runtime.output_dir
+
+    opt.dataroot = hydra.utils.to_absolute_path(opt.dataroot)
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
     print('The number of training images = %d' % dataset_size)
@@ -40,7 +86,6 @@ if __name__ == '__main__':
         iter_data_time = time.time()    # timer for data loading per iteration
         epoch_iter = 0                  # the number of training iterations in current epoch, reset to 0 every epoch
         visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
-        model.update_learning_rate()    # update learning rates in the beginning of every epoch.
         for i, data in enumerate(dataset):  # inner loop within one epoch
             iter_start_time = time.time()  # timer for computation per iteration
             if total_iters % opt.print_freq == 0:
@@ -59,7 +104,7 @@ if __name__ == '__main__':
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
                 t_comp = (time.time() - iter_start_time) / opt.batch_size
-                visualizer.print_current_losses(epoch, epoch_iter, losses, t_comp, t_data)
+                visualizer.print_current_losses(epoch, epoch_iter, losses, t_comp, t_data, total_iters)
                 if opt.display_id > 0:
                     visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
 
@@ -74,4 +119,10 @@ if __name__ == '__main__':
             model.save_networks('latest')
             model.save_networks(epoch)
 
+        model.update_learning_rate()    # update learning rates in the end of every epoch.
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
+
+    visualizer.close()
+    
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,34 @@
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: outputs/${name}/${my_override_dirname:${hydra.overrides}}
+  sweep:
+    dir: multirun/${name}
+    subdir: ${my_override_dirname:${hydra.overrides}}
+  sweeper:
+    params:
+      lr_D:     2e-8,2e-7,2e-6,2e-5,2e-4,2e-3
+      lr_G:     2e-6,2e-5,2e-4,2e-3,2e-2,2e-1
+
+defaults:
+  - base
+  - model:          test
+  - visualizer:     [visdom]
+  - train_defaults
+  - test_defaults
+  - _self_
+
+dataroot:         'datasets/oyu_stone_dataset/testA'
+name:             'oyu_cyclegan_test_run_11'
+load_size:        2078
+crop_size:        2048
+netG:             'unet_2048'
+no_dropout:       true
+gan_mode:         lsgan
+model_suffix:     '_A'
+aspect_ratio:     0.66753
+gpu_ids:          '3'
+
+suffix:           'lr_D-{lr_D}-lr_G-{lr_G}'
+seed:             42

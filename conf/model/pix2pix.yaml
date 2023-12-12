@@ -1,0 +1,8 @@
+# @package _global_
+model_name:   'pix2pix'
+norm:         'batch'
+netG:         'unet_256'
+dataset_mode: 'aligned'
+pool_size:    0
+gan_mode:     'vanilla'
+lambda_L1:    100.0       # weight for L1 loss

@@ -101,3 +101,14 @@ def mkdir(path):
     """
     if not os.path.exists(path):
         os.makedirs(path)
+
+def set_gpu_device(opt):
+    # set gpu ids
+    str_ids = opt.gpu_ids.split(',') if opt.gpu_ids else [] # for empty string
+    opt.gpu_ids = []
+    for str_id in str_ids:
+        id = int(str_id)
+        if id >= 0:
+            opt.gpu_ids.append(id)
+    if len(opt.gpu_ids) > 0:
+        torch.cuda.set_device(opt.gpu_ids[0])

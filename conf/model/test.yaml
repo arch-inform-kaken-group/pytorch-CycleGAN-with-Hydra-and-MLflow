@@ -1,0 +1,4 @@
+# @package _global_
+model_name:   'test'
+model_suffix: ''
+dataset_mode: 'single'

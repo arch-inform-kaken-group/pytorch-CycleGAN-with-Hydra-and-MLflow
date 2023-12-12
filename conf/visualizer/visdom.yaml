@@ -1,0 +1,5 @@
+# @package _global_
+display_id:       1                   # window id of the web display
+display_server:   "http://localhost"  # visdom server of the web display
+display_env:      'main'              # visdom display environment name (default is "main")
+display_port:     8097                # visdom port of the web display

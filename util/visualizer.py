@@ -3,14 +3,17 @@ import os
 import sys
 import ntpath
 import time
+from urllib.parse import urlparse
+import pathlib
 from . import util, html
 from subprocess import Popen, PIPE
-
+import hydra
+from util.mlflow_writer import MlflowWriter
 
 try:
     import wandb
 except ImportError:
-    print('Warning: wandb package cannot be found. The option "--use_wandb" will result in error.')
+    print('Warning: wandb package cannot be found. The option "use_wandb=true" will result in error.')
 
 if sys.version_info[0] == 2:
     VisdomExceptionBase = Exception
@@ -73,20 +76,25 @@ class Visualizer():
         self.use_html = opt.isTrain and not opt.no_html
         self.win_size = opt.display_winsize
         self.name = opt.name
-        self.port = opt.display_port
         self.saved = False
-        self.use_wandb = opt.use_wandb
-        self.wandb_project_name = opt.wandb_project_name
         self.current_epoch = 0
         self.ncols = opt.display_ncols
+        self.use_wandb = opt.get('use_wandb', False)
+        self.use_mlflow = opt.use_mlflow
+        self.tracking_uri = opt.tracking_uri
+        self.registry_uri = opt.registry_uri
 
         if self.display_id > 0:  # connect to a visdom server given <display_port> and <display_server>
             import visdom
+            self.port = opt.display_port
+            if opt.suffix:
+                opt.display_env = opt.name + '_' + opt.suffix
             self.vis = visdom.Visdom(server=opt.display_server, port=opt.display_port, env=opt.display_env)
             if not self.vis.check_connection():
                 self.create_visdom_connections()
 
         if self.use_wandb:
+            self.wandb_project_name = opt.wandb_project_name
             self.wandb_run = wandb.init(project=self.wandb_project_name, name=opt.name, config=opt) if not wandb.run else wandb.run
             self.wandb_run._label(repo='CycleGAN-and-pix2pix')
 
@@ -95,12 +103,36 @@ class Visualizer():
             self.img_dir = os.path.join(self.web_dir, 'images')
             print('create web directory %s...' % self.web_dir)
             util.mkdirs([self.web_dir, self.img_dir])
+
+        if self.use_mlflow:
+            self.tracking_uri = self._uri_convert(self.tracking_uri)
+            self.registry_uri = self._uri_convert(self.registry_uri)
+            if opt.suffix:
+                run_name = opt.suffix
+            else:
+                run_name = os.path.split(opt.output_dir)[-1]
+            self.mlflow_writer = MlflowWriter(
+                self.name,
+                run_name=run_name, 
+                tracking_uri=self.tracking_uri, 
+                registry_uri=self.registry_uri,)
+            self.mlflow_writer.log_params_from_omegaconf_dict(self.opt)
+            conf_dir = os.path.join(hydra.utils.get_original_cwd(), 'conf')
+            self.mlflow_writer.log_artifacts(conf_dir, 'conf')
+
         # create a logging file to store training losses
         self.log_name = os.path.join(opt.checkpoints_dir, opt.name, 'loss_log.txt')
         with open(self.log_name, "a") as log_file:
             now = time.strftime("%c")
             log_file.write('================ Training Loss (%s) ================\n' % now)
 
+    def _uri_convert(self, uri):
+        p = urlparse(uri)
+        if p.scheme == "file":
+            abs_path = hydra.utils.to_absolute_path(os.path.join(p.netloc, p.path))
+            uri = pathlib.Path(abs_path).as_uri()
+        return uri
+    
     def reset(self):
         """Reset the self.saved status"""
         self.saved = False
@@ -194,6 +226,8 @@ class Visualizer():
                 image_numpy = util.tensor2im(image)
                 img_path = os.path.join(self.img_dir, 'epoch%.3d_%s.png' % (epoch, label))
                 util.save_image(image_numpy, img_path)
+                if self.use_mlflow:
+                    self.mlflow_writer.log_artifact(img_path)
 
             # update website
             webpage = html.HTML(self.web_dir, 'Experiment name = %s' % self.name, refresh=1)
@@ -238,8 +272,9 @@ class Visualizer():
             self.wandb_run.log(losses)
 
     # losses: same format as |losses| of plot_current_losses
-    def print_current_losses(self, epoch, iters, losses, t_comp, t_data):
+    def print_current_losses(self, epoch, iters, losses, t_comp, t_data, total_iters):
         """print current losses on console; also save the losses to the disk
+           log losses to mlflow if self.use_mlflow
 
         Parameters:
             epoch (int) -- current epoch
@@ -247,6 +282,7 @@ class Visualizer():
             losses (OrderedDict) -- training losses stored in the format of (name, float) pairs
             t_comp (float) -- computational time per data point (normalized by batch_size)
             t_data (float) -- data loading time per data point (normalized by batch_size)
+            total_iters(int) -- total iteration count
         """
         message = '(epoch: %d, iters: %d, time: %.3f, data: %.3f) ' % (epoch, iters, t_comp, t_data)
         for k, v in losses.items():
@@ -255,3 +291,10 @@ class Visualizer():
         print(message)  # print the message
         with open(self.log_name, "a") as log_file:
             log_file.write('%s\n' % message)  # save the message
+        
+        if self.use_mlflow:
+            self.mlflow_writer.log_metrics(losses, total_iters)
+
+    def close(self):
+        if self.use_mlflow:
+            self.mlflow_writer.set_terminated()

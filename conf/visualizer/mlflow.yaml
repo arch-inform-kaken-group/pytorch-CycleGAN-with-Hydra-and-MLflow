@@ -1,0 +1,4 @@
+# @package _global_
+use_mlflow: true # if specified, then init mlflow logging
+tracking_uri: 'file:./mlruns' # tracking_uri for mlflow
+registry_uri: 'file:./mlruns' # registry_uri for mlflow
